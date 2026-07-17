@@ -103,7 +103,7 @@ function renderLinkModal(onConfirm, defaultValues = {}) {
     closeModal();
   });
 }
-export function renderLoginPrompt(container, authUrl) {
+function renderLoginPrompt(container, authUrl) {
   container.innerHTML = `
     <div style="text-align: center; padding: 40px;">
         <h2>Authentification Requise</h2>
