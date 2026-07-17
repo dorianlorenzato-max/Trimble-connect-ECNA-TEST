@@ -5,7 +5,7 @@ const CLIENT_ID = "4edb560c-d3f9-4d90-b7ee-6781976b0f50"; // <-- REMPLACEZ PAR V
 const REDIRECT_URI =
   "https://github.com/dorianlorenzato-max/Trimble-connect-ECNA-TEST/index.html"; // <-- REMPLACEZ PAR L'URL DE VOTRE EXTENSION (la page index.html)
 // On importe uniquement les fonctions d'UI dont nous avons besoin
-import { renderHomePage, renderLinkModal } from "./ui.js";
+import { renderHomePage, renderLinkModal, renderLoginPrompt } from "./ui.js";
 import {
   fetchUserProjectRole,
   fetchLinksConfiguration,
@@ -57,7 +57,7 @@ import {
     authUrl.searchParams.append("code_challenge_method", "S256");
 
     // L'API Workspace gère la redirection de la page principale de manière sécurisée.
-    window.top.location.href = authUrl.toString();
+    await triconnectAPI.host.openUrl(authUrl.toString(), "_top");
   }
 
   // Fonction pour échanger le code d'autorisation contre un access token
@@ -260,12 +260,20 @@ import {
     }
     // CAS A : L'utilisateur charge l'extension pour la première fois
     else {
-      // Optionnel : on pourrait stocker et réutiliser un token existant.
-      // Pour ce guide, nous redirigeons systématiquement pour obtenir un token frais.
       console.log(
-        "Aucun code d'authentification trouvé. Redirection vers la page de login Trimble...",
+        "Aucun code d'authentification trouvé. Affichage du bouton de connexion.",
       );
-      await initiateLogin(); // Redirige l'utilisateur
+
+      // 1. Affiche l'interface avec le bouton
+      renderLoginPrompt(mainContentDiv);
+
+      // 2. Attache un écouteur d'événement au clic sur le bouton
+      document
+        .getElementById("login-btn")
+        .addEventListener("click", async () => {
+          mainContentDiv.innerHTML = "<p>Redirection en cours...</p>";
+          await initiateLogin(); // Déclenche la redirection APRÈS le clic
+        });
     }
   } catch (error) {
     console.error(
