@@ -56,7 +56,9 @@ import {
     authUrl.searchParams.append("code_challenge", codeChallenge);
     authUrl.searchParams.append("code_challenge_method", "S256");
 
-    window.location.href = authUrl.toString();
+    //  Demander à la page Trimble de rediriger l'utilisateur
+    // L'API Workspace gère la redirection de la page principale de manière sécurisée.
+    await triconnectAPI.host.openUrl(authUrl.toString(), "_top");
   }
 
   // Fonction pour échanger le code d'autorisation contre un access token
