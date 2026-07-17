@@ -1,3 +1,9 @@
+// ==================================================================
+// == CONFIGURATION POUR L'AUTHENTIFICATION PKCE                   ==
+// ==================================================================
+const CLIENT_ID = "4edb560c-d3f9-4d90-b7ee-6781976b0f50"; // <-- REMPLACEZ PAR VOTRE CLIENT ID
+const REDIRECT_URI =
+  "https://github.com/dorianlorenzato-max/Trimble-connect-ECNA-TEST/index.html"; // <-- REMPLACEZ PAR L'URL DE VOTRE EXTENSION (la page index.html)
 // On importe uniquement les fonctions d'UI dont nous avons besoin
 import { renderHomePage, renderLinkModal } from "./ui.js";
 import {
@@ -10,6 +16,69 @@ import {
 
 // Exécution dans une fonction auto-appelée pour un environnement propre
 (async function () {
+  // ==================================================================
+  // == FONCTIONS UTILITAIRES POUR L'AUTHENTIFICATION PKCE   ==
+  // ==================================================================
+
+  // Fonction pour générer une chaîne aléatoire (le "code_verifier")
+  function generateRandomString(length) {
+    const possible =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    let text = "";
+    for (let i = 0; i < length; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+  }
+
+  // Fonction pour "hacher" le verifier et créer le "code_challenge"
+  async function generateCodeChallenge(verifier) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await window.crypto.subtle.digest("SHA-256", data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+  }
+
+  // Fonction pour rediriger l'utilisateur vers la page de login Trimble
+  async function initiateLogin() {
+    const codeVerifier = generateRandomString(128);
+    sessionStorage.setItem("pkce_code_verifier", codeVerifier);
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+    const authUrl = new URL("https://identity.trimble.com/authorize");
+    authUrl.searchParams.append("client_id", CLIENT_ID);
+    authUrl.searchParams.append("redirect_uri", REDIRECT_URI);
+    authUrl.searchParams.append("response_type", "code");
+    authUrl.searchParams.append("scope", "openid TrimbleConnect"); // Scopes de base
+    authUrl.searchParams.append("code_challenge", codeChallenge);
+    authUrl.searchParams.append("code_challenge_method", "S256");
+
+    window.location.href = authUrl.toString();
+  }
+
+  // Fonction pour échanger le code d'autorisation contre un access token
+  async function getToken(authCode, codeVerifier) {
+    const tokenUrl = "https://identity.trimble.com/token";
+    const response = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: CLIENT_ID,
+        code: authCode,
+        redirect_uri: REDIRECT_URI,
+        code_verifier: codeVerifier,
+      }),
+    });
+    if (!response.ok)
+      throw new Error("Échec de l'échange du code contre un token.");
+    return await response.json();
+  }
+
+  //Debut du code pour l'extension
   const mainContentDiv = document.getElementById("mainContent");
   const configBtn = document.getElementById("config-btn");
   let triconnectAPI;
@@ -157,54 +226,91 @@ import {
   }
 
   // ==================================================================
-  // == SÉQUENCE D'INITIALISATION SIMPLIFIÉE                         ==
+  // ==  SÉQUENCE D'INITIALISATION AVEC PKCE                ==
   // ==================================================================
   try {
-    // 2. Se connecter à l'API de l'espace de travail Trimble Connect
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get("code");
+
     triconnectAPI = await TrimbleConnectWorkspace.connect(
       window.parent,
       () => {},
       30000,
     );
 
-    // 3. Demander la permission pour l'access token
-    globalAccessToken =
-      await triconnectAPI.extension.requestPermission("accesstoken");
+    // CAS B : L'utilisateur revient de la page de login Trimble avec un code
+    if (authCode) {
+      const codeVerifier = sessionStorage.getItem("pkce_code_verifier");
+      if (!codeVerifier)
+        throw new Error(
+          "Code Verifier introuvable dans la session. Le flux d'authentification a échoué.",
+        );
+
+      const tokenData = await getToken(authCode, codeVerifier);
+      globalAccessToken = tokenData.access_token; // On récupère le token !
+
+      // On nettoie l'URL pour enlever le code, pour éviter les re-traitements
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      console.log(
+        "Authentification PKCE réussie, lancement de l'application...",
+      );
+      await launchApplication(); // On lance la logique principale de l'app
+    }
+    // CAS A : L'utilisateur charge l'extension pour la première fois
+    else {
+      // Optionnel : on pourrait stocker et réutiliser un token existant.
+      // Pour ce guide, nous redirigeons systématiquement pour obtenir un token frais.
+      console.log(
+        "Aucun code d'authentification trouvé. Redirection vers la page de login Trimble...",
+      );
+      await initiateLogin(); // Redirige l'utilisateur
+    }
+  } catch (error) {
+    console.error(
+      "Erreur critique au démarrage ou durant l'authentification :",
+      error,
+    );
+    mainContentDiv.innerHTML = `<p style="color:red;">Erreur critique : ${error.message}</p>`;
+  }
+
+  // Cette fonction encapsule la logique de votre application une fois le token obtenu.
+  async function launchApplication() {
     if (!globalAccessToken) {
       throw new Error(
-        "L'Access Token est invalide ou n'a pas pu être récupéré.",
+        "Tentative de lancement de l'application sans Access Token.",
       );
     }
 
-    // 4. AFFICHER L'ACCESS TOKEN DANS LA CONSOLE (Objectif principal)
+    // --- On remet ici votre logique originale de chargement de données ---
     console.log("--- Access Token Utilisateur ---");
     console.log(globalAccessToken);
     console.log("---------------------------------");
 
-    // 5. Mettre à jour le menu de l'extension pour correspondre au nouveau nom
     triconnectAPI.ui.setMenu({
       title: "TEST",
       icon: "https://dorianlorenzato-max.github.io/trimble-connect-ecna-extension/logoEiffage.png",
       command: "test_extension_clicked",
     });
+
     const project = await triconnectAPI.project.getCurrentProject();
-    if (!project || !project.id) {
+    if (!project || !project.id)
       throw new Error(
         "Impossible de récupérer les informations du projet actuel.",
       );
-    }
-    currentProjectId = project.id; // On assigne la valeur à la variable globale
+
+    currentProjectId = project.id;
     console.log(`Projet actuel ID : ${currentProjectId}`);
 
-    // 6. Afficher la page d'accueil finale
     configBtn.addEventListener("click", () => {
       appState.isConfigModeActive = !appState.isConfigModeActive;
       if (!appState.isConfigModeActive) appState.editMode = "view";
       rerenderUI();
     });
+
     async function loadInitialDataAndRender() {
       try {
-        mainContentDiv.innerHTML = "<p>Chargement...</p>";
+        mainContentDiv.innerHTML = "<p>Chargement des données du projet...</p>";
         const userRole = await fetchUserProjectRole(
           currentProjectId,
           globalAccessToken,
@@ -232,9 +338,6 @@ import {
       }
     }
 
-    loadInitialDataAndRender();
-  } catch (error) {
-    console.error("Erreur critique au démarrage :", error);
-    mainContentDiv.innerHTML = `<p style="color:red;">Erreur critique au démarrage : ${error.message}</p>`;
+    await loadInitialDataAndRender();
   }
-})();
+})(); // Fin de l'IIFE
