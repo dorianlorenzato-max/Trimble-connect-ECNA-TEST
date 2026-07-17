@@ -185,10 +185,18 @@ import {
 
     // 5. Mettre à jour le menu de l'extension pour correspondre au nouveau nom
     triconnectAPI.ui.setMenu({
-      title: "test",
+      title: "TEST",
       icon: "https://dorianlorenzato-max.github.io/trimble-connect-ecna-extension/logoEiffage.png",
       command: "test_extension_clicked",
     });
+    const project = await triconnectAPI.project.getCurrentProject();
+    if (!project || !project.id) {
+      throw new Error(
+        "Impossible de récupérer les informations du projet actuel.",
+      );
+    }
+    currentProjectId = project.id; // On assigne la valeur à la variable globale
+    console.log(`Projet actuel ID : ${currentProjectId}`);
 
     // 6. Afficher la page d'accueil finale
     configBtn.addEventListener("click", () => {
