@@ -103,5 +103,14 @@ function renderLinkModal(onConfirm, defaultValues = {}) {
     closeModal();
   });
 }
+function renderLoginPrompt(container) {
+  container.innerHTML = `
+    <div style="text-align: center; padding: 40px;">
+        <h2>Authentification Requise</h2>
+        <p>Pour utiliser cette extension, vous devez vous authentifier auprès de Trimble.</p>
+        <button id="login-btn" class="button-primary" style="margin-top: 20px;">Se connecter avec Trimble</button>
+    </div>
+  `;
+}
 // On exporte toujours la fonction
-export { renderHomePage, renderLinkModal };
+export { renderHomePage, renderLinkModal, renderLoginPrompt };
