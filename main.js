@@ -43,7 +43,7 @@ import {
   }
 
   // Fonction pour rediriger l'utilisateur vers la page de login Trimble
-  async function initiateLogin() {
+  async function buildAuthUrl() {
     const codeVerifier = generateRandomString(128);
     sessionStorage.setItem("pkce_code_verifier", codeVerifier);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
@@ -52,12 +52,11 @@ import {
     authUrl.searchParams.append("client_id", CLIENT_ID);
     authUrl.searchParams.append("redirect_uri", REDIRECT_URI);
     authUrl.searchParams.append("response_type", "code");
-    authUrl.searchParams.append("scope", "openid TrimbleConnect"); // Scopes de base
+    authUrl.searchParams.append("scope", "openid TrimbleConnect");
     authUrl.searchParams.append("code_challenge", codeChallenge);
     authUrl.searchParams.append("code_challenge_method", "S256");
 
-    // L'API Workspace gère la redirection de la page principale de manière sécurisée.
-    await triconnectAPI.host.openUrl(authUrl.toString(), "_top");
+    return authUrl.toString();
   }
 
   // Fonction pour échanger le code d'autorisation contre un access token
@@ -261,19 +260,16 @@ import {
     // CAS A : L'utilisateur charge l'extension pour la première fois
     else {
       console.log(
-        "Aucun code d'authentification trouvé. Affichage du bouton de connexion.",
+        "Aucun code d'authentification trouvé. Affichage du lien de connexion.",
       );
 
-      // 1. Affiche l'interface avec le bouton
-      renderLoginPrompt(mainContentDiv);
+      // 1. Construit l'URL d'authentification complète
+      const loginUrl = await buildAuthUrl();
 
-      // 2. Attache un écouteur d'événement au clic sur le bouton
-      document
-        .getElementById("login-btn")
-        .addEventListener("click", async () => {
-          mainContentDiv.innerHTML = "<p>Redirection en cours...</p>";
-          await initiateLogin(); // Déclenche la redirection APRÈS le clic
-        });
+      // 2. Affiche l'interface avec le lien (qui contient déjà l'URL)
+      renderLoginPrompt(mainContentDiv, loginUrl);
+
+      // 3. Plus besoin d'écouteur d'événement, le lien gère le clic nativement.
     }
   } catch (error) {
     console.error(
