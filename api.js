@@ -2,200 +2,846 @@
  * Module pour la communication avec les APIs Trimble Connect.
  */
 
-const CONFIG_FOLDER_NAME = "Configuration_Links";
-const LINKS_CONFIG_FILENAME = "links-config.json";
-
-// Récupère le rôle de l'utilisateur pour le projet actuel.
-
-async function fetchUserProjectRole(projectId, accessToken) {
-  console.log("--- Début de la nouvelle méthode fetchUserProjectRole ---");
-  console.log("Access Token utilisé :", accessToken);
-  const url = `https://app21.connect.trimble.com/tc/api/2.0/projects/${projectId}/users/me`;
-  console.log("Appel de l'endpoint général :", url); // AJOUT : Affiche l'URL appelée
-
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  console.log("Réponse reçue du serveur. Statut :", response.status);
-  if (!response.ok) {
-    const errorBody = await response.json();
-    console.error(
-      "Échec de l'appel à /users/me. Corps de l'erreur :",
-      errorBody,
-    );
-    throw new Error("Impossible de récupérer le rôle de l'utilisateur.");
-  }
-  const userDetails = await response.json();
-  return userDetails.role;
-}
-
-/**
- * Récupère l'ID du dossier racine du projet.
- * @param {object} triconnectAPI - L'instance de l'API Trimble Connect.
- * @param {string} accessToken - Le jeton d'accès.
- * @returns {Promise<string>} L'ID du dossier racine.
- */
-async function getProjectRootId(triconnectAPI, accessToken) {
+// Fonction principale pour récupérer et agréger toutes les données nécessaires aux visas.
+async function fetchVisaDocuments(
+  accessToken,
+  triconnectAPI,
+  configFolderId,
+  assignmentsFilename,
+  options = {},
+) {
   const projectInfo = await triconnectAPI.project.getCurrentProject();
-  const url = `https://app21.connect.trimble.com/tc/api/2.0/projects/${projectInfo.id}`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok) {
-    throw new Error("Impossible de récupérer les détails complets du projet.");
+  const projectId = projectInfo.id;
+
+  const { mode, loggedInUserGroupIds, allFluxDefinitions } = options;
+
+  const [userToGroupMap, assignmentsConfig, trackingData] = await Promise.all([
+    fetchUsersAndGroups(projectId, accessToken),
+    fetchConfigurationFile(accessToken, configFolderId, assignmentsFilename),
+    fetchConfigurationFile(
+      accessToken,
+      configFolderId,
+      "visa-tracking.json",
+    ).then((data) => data || {}),
+  ]);
+
+  const visaPropertyId = "775c8d80-179b-11f1-b157-5bc3cc52c2d2";
+
+  const assignedFolderIds = Object.keys(assignmentsConfig || {});
+  if (assignedFolderIds.length === 0) {
+    return [];
   }
-  const fullProjectInfo = await response.json();
-  if (!fullProjectInfo.rootId) {
-    throw new Error("Impossible de trouver l'ID du dossier racine (rootId).");
-  }
-  return fullProjectInfo.rootId;
-}
-/**
- * Trouve un dossier par son nom dans un dossier parent, ou le crée s'il n'existe pas.
- * @param {string} parentFolderId - L'ID du dossier parent où chercher/créer.
- * @param {string} folderName - Le nom du dossier à trouver ou créer.
- * @param {string} accessToken - Le jeton d'accès.
- * @returns {Promise<string>} L'ID du dossier trouvé ou nouvellement créé.
- */
-async function findOrCreateFolder(parentFolderId, folderName, accessToken) {
-  // 1. Chercher si le dossier existe déjà
-  const itemsUrl = `https://app21.connect.trimble.com/tc/api/2.0/folders/${parentFolderId}/items`;
-  const response = await fetch(itemsUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Impossible de lister le contenu du dossier parent (ID: ${parentFolderId}).`,
-    );
-  }
-  const items = await response.json();
-  const existingFolder = items.find(
-    (item) => item.type === "FOLDER" && item.name === folderName,
+
+  // ÉTAPE A : Créer les promesses pour récupérer la DERNIÈRE version de chaque PDF dans les dossiers affectés
+  const pdfFilePromises = assignedFolderIds.map((folderId) =>
+    fetchPDFFilesInFolder(folderId, accessToken).catch(() => []),
   );
 
-  if (existingFolder) {
-    console.log(`Dossier "${folderName}" trouvé (ID: ${existingFolder.id}).`);
-    return existingFolder.id; // Le dossier existe, on retourne son ID
+  // ÉTAPE B : Exécuter ces promesses et aplatir le résultat
+  const nestedLatestPdfFiles = await Promise.all(pdfFilePromises);
+  const latestPdfFiles = nestedLatestPdfFiles.flat();
+
+  // ÉTAPE C : Pour chaque fichier (dernière version), créer une nouvelle promesse pour récupérer TOUTES ses versions
+  const allVersionsPromises = latestPdfFiles.map((latestFile) =>
+    fetchFileAllVersions(latestFile.id, accessToken).then((versions) =>
+      versions.map((v) => ({ ...v, parentId: latestFile.parentId })),
+    ),
+  );
+
+  // ÉTAPE D : Exécuter ces nouvelles promesses et aplatir le résultat final
+  const nestedAllVersions = await Promise.all(allVersionsPromises);
+  let allPdfFiles = nestedAllVersions.flat();
+
+  // ÉTAPE E : La variable `filesToProcess` contient maintenant toutes les versions de tous les documents
+  let filesToProcess = allPdfFiles;
+
+  if (mode === "missions") {
+    // On commence par identifier la dernière version de chaque document à partir de la liste complète.
+    const maxVersionMap = new Map();
+    allPdfFiles.forEach((file) => {
+      const fileId = file.id; // L'ID du document est la clé
+      const version = parseInt(file.revision, 10) || 0;
+      if (!maxVersionMap.has(fileId) || version > maxVersionMap.get(fileId)) {
+        maxVersionMap.set(fileId, version);
+      }
+    });
+
+    // 2. On crée une liste ne contenant QUE ces dernières versions.
+    const latestVersionsOfFiles = allPdfFiles.filter((file) => {
+      const fileId = file.id;
+      const version = parseInt(file.revision, 10) || 0;
+      return version === maxVersionMap.get(fileId);
+    });
+
+    //  On applique le filtre des missions
+    filesToProcess = latestVersionsOfFiles.filter((file) => {
+      const assignedFluxName = assignmentsConfig[file.parentId];
+      if (!assignedFluxName) return false;
+
+      const fluxDefinition = allFluxDefinitions.find(
+        (flux) => flux.name === assignedFluxName,
+      );
+      if (!fluxDefinition || !fluxDefinition.steps) return false;
+
+      // On récupère les étapes où l'utilisateur est impliqué
+      const userInvolvedSteps = fluxDefinition.steps.filter((step) =>
+        step.groupIds.some((groupId) => loggedInUserGroupIds.includes(groupId)),
+      );
+      if (userInvolvedSteps.length === 0) return false;
+
+      // On récupère l'historique de visa pour CETTE version spécifique
+      const versionNumber = file.revision || "N/A";
+      const trackingId = `${file.id}_v${versionNumber}`;
+      const docTrackingInfo = trackingData[trackingId] || [];
+      console.log(
+        `--- Analyse pour le document : %c${file.name} (v${versionNumber})`,
+        "font-weight: bold;",
+      );
+      console.log("   ID de suivi généré (trackingId) :", trackingId);
+      console.log(
+        "   Données de suivi trouvées pour cet ID (docTrackingInfo) :",
+        docTrackingInfo,
+      );
+      console.log(
+        "   Groupes de l'utilisateur connecté (loggedInUserGroupIds) :",
+        loggedInUserGroupIds,
+      );
+
+      // ON APPLIQUE LA LOGIQUE ORIGINALE, QUI FONCTIONNAIT
+      for (const step of userInvolvedSteps) {
+        // 1. L'utilisateur a-t-il déjà soumis son visa pour cette étape ?
+        console.log(
+          `      -> Évaluation de l'étape ${step.step} (requiert les groupes: ${step.groupIds.join(", ")})`,
+        );
+
+        const hasUserActedForThisStep = docTrackingInfo.some(
+          (entry) =>
+            loggedInUserGroupIds.includes(entry.groupId) &&
+            step.groupIds.includes(entry.groupId),
+        );
+        console.log(
+          `      -> La condition "hasUserActedForThisStep" est : %c${hasUserActedForThisStep}`,
+          hasUserActedForThisStep ? "color: red;" : "color: green;",
+        );
+        if (hasUserActedForThisStep) {
+          continue; // Si oui, on passe à la prochaine étape où il pourrait être impliqué.
+        }
+
+        // 2. Si c'est la première étape du flux, la mission est active pour lui.
+        if (step.step === 1) {
+          console.log("      -> VERDICT : Mission active (étape 1).");
+          return true; // C'est une mission valide.
+        }
+
+        // 3. Si c'est une étape > 1, on vérifie si l'étape précédente est terminée.
+        const previousStep = fluxDefinition.steps.find(
+          (s) => s.step === step.step - 1,
+        );
+        if (!previousStep) continue; // Sécurité, ne devrait pas arriver
+
+        const previousStepGroupIds = previousStep.groupIds;
+        const previousStepVisaCount = docTrackingInfo.filter((entry) =>
+          previousStepGroupIds.includes(entry.groupId),
+        ).length;
+
+        // L'étape précédente est complète si le nombre de visas correspond au nombre de groupes requis.
+        const isPreviousStepComplete =
+          previousStepVisaCount === previousStepGroupIds.length;
+        console.log(
+          `      -> Vérification de l'étape précédente (${previousStep.step}) :`,
+        );
+        console.log(
+          `         - Groupes requis : ${previousStepGroupIds.join(", ")}`,
+        );
+        console.log(
+          `         - Visas trouvés pour ces groupes : ${previousStepVisaCount}`,
+        );
+        console.log(
+          `         - L'étape précédente est-elle complète ? : %c${isPreviousStepComplete}`,
+          isPreviousStepComplete ? "color: green;" : "color: red;",
+        );
+        if (isPreviousStepComplete) {
+          return true; // L'étape précédente est terminée, donc cette mission est maintenant active.
+        }
+      }
+
+      // Si la boucle se termine sans rien trouver, l'utilisateur n'a aucune mission active pour ce document.
+      console.log(
+        "   -> VERDICT FINAL : Aucune mission active pour cet utilisateur sur ce document.",
+      );
+      return false;
+    });
   }
 
-  // 2. S'il n'existe pas, on le crée
-  console.log(`Dossier "${folderName}" non trouvé. Création en cours...`);
-  const createUrl = `https://app21.connect.trimble.com/tc/api/2.0/folders`;
-  const createResponse = await fetch(createUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ name: folderName, parentId: parentFolderId }),
-  });
+  const visaDocuments = [];
+  for (const file of filesToProcess) {
+    const versionNumber = file.revision || "N/A";
+    const trackingId = `${file.id}_v${versionNumber}`;
 
-  if (!createResponse.ok) {
-    throw new Error(`La création du dossier "${folderName}" a échoué.`);
+    // On récupère les infos de suivi spécifiques à CETTE version
+    const docTrackingInfo = trackingData ? trackingData[trackingId] || [] : [];
+    // On calcule le statut basé sur l'historique de CETTE version
+    const status = calculateGeneralStatus(docTrackingInfo);
+
+    const depositorId = file.modifiedBy ? file.modifiedBy.id : null;
+    const depositorName = file.modifiedBy
+      ? `${file.modifiedBy.firstName || ""} ${file.modifiedBy.lastName || ""}`.trim()
+      : "Inconnu";
+    const depositDate = file.modifiedOn
+      ? new Date(file.modifiedOn).toLocaleDateString()
+      : "Date inconnue";
+    const lot = depositorId
+      ? userToGroupMap.get(depositorId) || "Non assigné"
+      : "Non assigné";
+    const fluxName = assignmentsConfig[file.parentId] || null;
+    const allObservations = docTrackingInfo
+      .map((entry) => entry.observation)
+      .filter((obs) => obs);
+
+    visaDocuments.push({
+      id: file.id,
+      trackingId: trackingId, // L'identifiant unique composite
+      projectId: projectId,
+      parentId: file.parentId,
+      name: file.name,
+      version: versionNumber,
+      lot: lot,
+      depositorName: depositorName,
+      depositDate: depositDate,
+      status: status, // Le statut, maintenant correctement calculé pour cette version
+      trackingInfo: docTrackingInfo,
+      allObservations: allObservations, // L'historique, maintenant spécifique à cette version
+      fluxName: fluxName,
+      depositDateObject: file.modifiedOn ? new Date(file.modifiedOn) : null,
+    });
   }
-  const newFolder = await createResponse.json();
+
   console.log(
-    `Dossier "${folderName}" créé avec succès (ID: ${newFolder.id}).`,
+    `----- Fin du traitement. ${visaDocuments.length} documents pertinents trouvés pour le mode "${mode}" -----`,
   );
-  return newFolder.id;
+  return visaDocuments;
 }
 
-/**
- * Lit le fichier de configuration des liens depuis Trimble Connect.
- * @param {string} accessToken - Le jeton d'accès.
- * @param {string} configFolderId - L'ID du dossier de configuration.
- * @returns {Promise<Array>} Une liste des liens configurés.
- */
-async function fetchLinksConfiguration(accessToken, configFolderId) {
-  const url = `https://app21.connect.trimble.com/tc/api/2.0/folders/${configFolderId}/items`;
-  const response = await fetch(url, {
+// --- Fonctions pour récupérer les groupes et les utilisateurs de chaque groupes ---
+
+async function fetchUsersAndGroups(projectId, accessToken) {
+  const userToGroupMap = new Map();
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const groupsApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/groups?projectId=${projectId}`;
+  const groupsResponse = await fetch(groupsApiUrl, { headers });
+  if (!groupsResponse.ok)
+    throw new Error("Impossible de récupérer les groupes du projet.");
+  const allGroups = await groupsResponse.json();
+
+  for (const group of allGroups) {
+    const usersInGroupApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/groups/${group.id}/users`;
+    const usersInGroupResponse = await fetch(usersInGroupApiUrl, { headers });
+    if (usersInGroupResponse.ok) {
+      const groupUsers = await usersInGroupResponse.json();
+      groupUsers.forEach((user) => {
+        if (!userToGroupMap.has(user.id)) {
+          userToGroupMap.set(user.id, group.name);
+        }
+      });
+    }
+  }
+  return userToGroupMap;
+}
+
+// --- Récupération des fichier PDF d'un dossier ---
+
+async function fetchPDFFilesInFolder(folderId, accessToken) {
+  const filesApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/folders/${folderId}/items`;
+  const response = await fetch(filesApiUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!response.ok) {
-    throw new Error(
-      "Impossible de lister le contenu du dossier de configuration.",
-    );
-  }
-  const items = await response.json();
-  const configFile = items.find((item) => item.name === LINKS_CONFIG_FILENAME);
-
-  if (!configFile) {
-    console.log(
-      "Le fichier de configuration n'existe pas encore. Retourne une liste vide.",
-    );
-    return []; // Si le fichier n'existe pas, on retourne une liste vide.
-  }
-
-  // Si le fichier existe, on le télécharge et on retourne son contenu.
-  const downloadUrlResponse = await fetch(
-    `https://app21.connect.trimble.com/tc/api/2.0/files/fs/${configFile.id}/downloadurl`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
+  if (!response.ok)
+    throw new Error("Impossible de récupérer les fichiers du dossier.");
+  const projectFiles = await response.json();
+  return projectFiles.filter(
+    (file) => file.name && file.name.toLowerCase().endsWith(".pdf"),
   );
-  const downloadInfo = await downloadUrlResponse.json();
-  const contentResponse = await fetch(downloadInfo.url);
-  const links = await contentResponse.json();
-  return links;
 }
-/**
- * Sauvegarde la configuration des liens dans un fichier JSON sur Trimble Connect.
- * @param {string} accessToken - Le jeton d'accès.
- * @param {string} configFolderId - L'ID du dossier de configuration.
- * @param {Array} linksData - Le tableau des liens à sauvegarder.
- * @returns {Promise<object>} Les détails du fichier sauvegardé.
- */
-async function saveLinksConfiguration(accessToken, configFolderId, linksData) {
-  const fileName = "links-config.json";
-  const jsonString = JSON.stringify(linksData, null, 2);
-  const fileBlob = new Blob([jsonString], { type: "application/json" });
 
-  // 1. Initier l'upload
-  const initiateUrl = `https://app21.connect.trimble.com/tc/api/2.0/files/fs/upload?parentId=${configFolderId}&parentType=FOLDER`;
-  const initiateResponse = await fetch(initiateUrl, {
+// --- Récupération des statuts d'un fichier---
+
+async function fetchFilePSetStatus(projectId, fileId, accessToken) {
+  const psetsApiUrl = `https://pset-api.eu-west-1.connect.trimble.com/v1/libs/tcproject:prod:${projectId}/psets`;
+  const psetsResponse = await fetch(psetsApiUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!psetsResponse.ok) {
+    console.warn(
+      `Impossible de récupérer les PSets pour le fichier ${fileId}.`,
+    );
+    return "Statut indisponible";
+  }
+
+  const psetsData = await psetsResponse.json();
+  const visaPropertyId = "775c8d80-179b-11f1-b157-5bc3cc52c2d2";
+  const currentFileFRN = `frn:tcfile:${fileId}`;
+  const relevantPSet = psetsData.items?.find(
+    (pset) => pset.link === currentFileFRN && pset.defId === "tcfiles",
+  );
+  return relevantPSet?.props?.[visaPropertyId] || "En Cours";
+}
+
+// Récupère uniquement la liste des groupes d'un projet
+
+async function fetchProjectGroups(projectId, accessToken) {
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const groupsApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/groups?projectId=${projectId}`;
+  const response = await fetch(groupsApiUrl, { headers });
+  if (!response.ok)
+    throw new Error("Impossible de récupérer les groupes du projet.");
+  return await response.json();
+}
+
+// lecture du fichier JSON pour la configuration des flux
+
+async function fetchConfigurationFile(accessToken, folderId, filename) {
+  const apiBaseUrl = "https://app21.connect.trimble.com/tc/api/2.0";
+  try {
+    const listItemsUrl = `${apiBaseUrl}/folders/${folderId}/items`;
+    const itemsResponse = await fetch(listItemsUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!itemsResponse.ok)
+      throw new Error(
+        `Impossible de lister le contenu du dossier (Statut: ${itemsResponse.status}).`,
+      );
+
+    const allItems = await itemsResponse.json();
+    const fileInfo = allItems.find(
+      (item) => item.name === filename && item.type === "FILE",
+    );
+
+    if (!fileInfo) return null;
+
+    const getDownloadUrl = `${apiBaseUrl}/files/fs/${fileInfo.id}/downloadurl`;
+    const downloadInfoResponse = await fetch(getDownloadUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!downloadInfoResponse.ok)
+      throw new Error("Impossible d'obtenir l'URL de téléchargement.");
+
+    const downloadInfo = await downloadInfoResponse.json();
+    const fileContentResponse = await fetch(downloadInfo.url);
+    if (!fileContentResponse.ok)
+      throw new Error("Le téléchargement du contenu du fichier a échoué.");
+
+    return await fileContentResponse.json();
+  } catch (error) {
+    console.error("Erreur dans fetchConfigurationFile:", error);
+    throw error;
+  }
+}
+
+//Sauvegarde un objet de configuration dans un fichier JSON dans le dossier de configuration
+
+async function saveConfigurationFile(
+  triconnectAPI,
+  accessToken,
+  dataToSave,
+  filename,
+  parentFolderId, // Nom plus clair que "rootFolderId"
+) {
+  const apiBaseUrl = "https://app21.connect.trimble.com/tc/api/2.0";
+  const initiateUploadUrl = `${apiBaseUrl}/files/fs/upload?parentId=${parentFolderId}&parentType=FOLDER`;
+  const initiatePayload = { name: filename };
+
+  const initiateResponse = await fetch(initiateUploadUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ name: fileName }),
+    body: JSON.stringify(initiatePayload),
   });
-  if (!initiateResponse.ok)
-    throw new Error("L'initiation de l'upload a échoué.");
+
+  if (!initiateResponse.ok) {
+    const errorText = await initiateResponse.text();
+    throw new Error(
+      `Initiation upload échouée (${initiateResponse.status}): ${errorText}`,
+    );
+  }
 
   const uploadDetails = await initiateResponse.json();
   const finalUploadUrl = uploadDetails.contents[0].url;
   const uploadId = uploadDetails.uploadId;
 
-  // 2. Uploader le contenu
+  let fileBlob;
+  let contentType;
+  if (dataToSave instanceof Blob) {
+    fileBlob = dataToSave;
+    contentType = dataToSave.type;
+  } else {
+    const jsonString = JSON.stringify(dataToSave, null, 2);
+    fileBlob = new Blob([jsonString], { type: "application/json" });
+    contentType = "application/json";
+  }
+
   const uploadResponse = await fetch(finalUploadUrl, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": contentType },
     body: fileBlob,
   });
-  if (!uploadResponse.ok) throw new Error("L'upload du fichier a échoué.");
 
-  // 3. Vérifier l'upload
-  const verifyUrl = `https://app21.connect.trimble.com/tc/api/2.0/files/fs/upload?uploadId=${uploadId}&wait=true`;
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(
+      `L'upload final du fichier a échoué. Statut: ${uploadResponse.status}, Réponse: ${errorText}`,
+    );
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const verifyUrl = `${apiBaseUrl}/files/fs/upload?uploadId=${uploadId}&wait=true`;
   const verifyResponse = await fetch(verifyUrl, {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!verifyResponse.ok)
-    throw new Error("La vérification de l'upload a échoué.");
+
+  if (!verifyResponse.ok) {
+    const errorText = await verifyResponse.text();
+    throw new Error(
+      `La vérification de l'upload a échoué. Statut: ${verifyResponse.status}, Réponse: ${errorText}`,
+    );
+  }
 
   const finalFileDetails = await verifyResponse.json();
-  if (finalFileDetails.status !== "DONE")
-    throw new Error("Le traitement du fichier sur le serveur a échoué.");
-
+  if (finalFileDetails.status !== "DONE") {
+    throw new Error(
+      `Le traitement du fichier sur le serveur a échoué. Statut final: ${finalFileDetails.status || "inconnu"}`,
+    );
+  }
   return finalFileDetails;
 }
 
-// Exporte les fonctions pour les rendre utilisables dans main.js
+// Récupération de l'arborescence du projet Trimble
+
+async function fetchFolderContents(folderId, accessToken) {
+  const listItemsUrl = `https://app21.connect.trimble.com/tc/api/2.0/folders/${folderId}/items`;
+  const response = await fetch(listItemsUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok)
+    throw new Error(
+      `Impossible de lister le contenu du dossier ${folderId} (Statut: ${response.status}).`,
+    );
+  const allItems = await response.json();
+  return allItems.filter((item) => item.type === "FOLDER");
+}
+
+// Récupère les détails de l'utilisateur actuellement connecté via l'API REST
+
+async function fetchLoggedInUserDetails(accessToken) {
+  const userApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/users/me`;
+  const response = await fetch(userApiUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok)
+    throw new Error(
+      `Recharger la page. Impossible de récupérer les détails de l'utilisateur connecté.`,
+    );
+  return await response.json();
+}
+
+// récupère les différentes valeurs de la methadonnée "Visa" ancienne version pour ne plus dépendre des PSET
+/*async function fetchVisaPossibleStates(projectId, accessToken) {
+  const defsApiUrl = `https://pset-api.eu-west-1.connect.trimble.com/v1/libs/tcproject:prod:${projectId}/defs`;
+  const response = await fetch(defsApiUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok)
+    throw new Error(
+      "Impossible de récupérer les définitions des Psets du projet.",
+    );
+
+  const defsData = await response.json();
+  const tcfilesDef = defsData.items?.find((item) => item.id === "tcfiles");
+  if (!tcfilesDef) return [];
+
+  const visaPropertyId = "775c8d80-179b-11f1-b157-5bc3cc52c2d2";
+  const visaProperty = tcfilesDef.schema?.props?.[visaPropertyId];
+  if (visaProperty && Array.isArray(visaProperty.enum)) {
+    return visaProperty.enum;
+  }
+  return [];
+}*/
+async function fetchVisaPossibleStates(projectId, accessToken) {
+  // Plus besoin des arguments, mais on les garde pour ne pas casser l'appel
+  console.log("Récupération des statuts de visa depuis la liste statique.");
+
+  // On retourne une promesse résolue avec la liste fixe des statuts
+  return Promise.resolve(["VSO", "VAO", "REF", "SO"]);
+}
+//SAUVEGARDE DU STATUT APRES VISA D'UN DOCUMENT
+
+async function updatePSetStatus(projectId, fileId, newStatus, accessToken) {
+  const libId = `tcproject:prod:${projectId}`;
+  const link = `frn:tcfile:${fileId}`;
+  const defId = "tcfiles";
+  const encodedLink = encodeURIComponent(link);
+  const psetUpdateApiUrl = `https://pset-api.eu-west-1.connect.trimble.com/v1/psets/${encodedLink}/${libId}/${defId}`;
+  const visaPropertyId = "775c8d80-179b-11f1-b157-5bc3cc52c2d2";
+
+  const payload = { props: { [visaPropertyId]: newStatus } };
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+
+  const response = await fetch(psetUpdateApiUrl, {
+    method: "PATCH",
+    headers: headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Impossible de mettre à jour le PSet via PATCH pour le fichier ${fileId}. ${errorText}`,
+    );
+  }
+  return await response.json();
+}
+
+// Récupération de l'id racine et de des Id des dossiers pour sauvegarder les json
+
+async function getRootFolders(triconnectAPI, accessToken) {
+  const basicProjectInfo = await triconnectAPI.project.getCurrentProject();
+  const projectId = basicProjectInfo.id;
+  const projectDetailsApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/projects/${projectId}`;
+
+  const response = await fetch(projectDetailsApiUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok)
+    throw new Error(
+      "Impossible de récupérer les détails complets du projet via l'API REST.",
+    );
+
+  const fullProjectInfo = await response.json();
+  const rootFolderId = fullProjectInfo.rootId;
+  if (!rootFolderId)
+    throw new Error(
+      "Impossible de trouver l'ID du dossier racine dans les détails du projet.",
+    );
+
+  return await fetchFolderContents(rootFolderId, accessToken);
+}
+
+// Récupère l'ID du dossier "Configuration_Visa"
+
+async function getConfigFolderId(triconnectAPI, accessToken) {
+  const configFolderName = "Configuration_Visa";
+  const rootFolders = await getRootFolders(triconnectAPI, accessToken);
+  const configFolder = rootFolders.find(
+    (folder) => folder.name === configFolderName,
+  );
+
+  if (configFolder) {
+    return configFolder.id;
+  } else {
+    console.error(
+      `Erreur critique : Le dossier nommé "${configFolderName}" est introuvable à la racine du projet.`,
+    );
+    return null;
+  }
+}
+
+// pour filtrer le tableau missions avec les flux
+
+async function fetchFluxDefinitions(
+  accessToken,
+  configFolderId,
+  configFilename,
+) {
+  const config = await fetchConfigurationFile(
+    accessToken,
+    configFolderId,
+    configFilename,
+  );
+  return config ? config.flux || [] : [];
+}
+
+//  Nettoie un nom pour qu'il soit valide en tant que nom de dossier
+function sanitizeFolderName(name) {
+  // Remplace les caractères invalides par des underscores
+  return name.replace(/[\\?%*:|"<>]/g, "_");
+}
+
+// Crée un dossier dans un dossier parent donné
+async function createFolder(parentFolderId, folderName, accessToken) {
+  const createUrl = `https://app21.connect.trimble.com/tc/api/2.0/folders`;
+  const payload = {
+    name: sanitizeFolderName(folderName), // On utilise le nom nettoyé
+    parentId: parentFolderId,
+  };
+
+  const response = await fetch(createUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `La création du dossier "${folderName}" a échoué: ${errorText}`,
+    );
+  }
+
+  return await response.json(); // Retourne les détails du nouveau dossier, y compris son ID
+}
+
+//  Trouve un dossier ou le crée s'il n'existe pas
+async function findOrCreateFolder(parentFolderId, folderName, accessToken) {
+  const sanitizedName = sanitizeFolderName(folderName);
+
+  // 1. On cherche d'abord si le dossier existe
+  const folderContents = await fetchFolderContents(parentFolderId, accessToken);
+  const existingFolder = folderContents.find(
+    (item) => item.name === sanitizedName && item.type === "FOLDER",
+  );
+
+  if (existingFolder) {
+    console.log(
+      `Dossier trouvé: "${sanitizedName}" (ID: ${existingFolder.id})`,
+    );
+    return { id: existingFolder.id, created: false }; // Il existe, on retourne son ID
+  } else {
+    // 2. Il n'existe pas, on le crée
+    console.log(`Dossier "${sanitizedName}" non trouvé. Création en cours...`);
+    const newFolder = await createFolder(
+      parentFolderId,
+      sanitizedName,
+      accessToken,
+    );
+    console.log(`Dossier créé: "${sanitizedName}" (ID: ${newFolder.id})`);
+    return { id: newFolder.id, created: true }; // On retourne l'ID du dossier nouvellement créé
+  }
+}
+
+// Récupère l'ID du dossier racine du projet
+
+async function getProjectRootId(triconnectAPI, accessToken) {
+  const basicProjectInfo = await triconnectAPI.project.getCurrentProject();
+  const projectId = basicProjectInfo.id;
+  const projectDetailsApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/projects/${projectId}`;
+
+  const response = await fetch(projectDetailsApiUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    throw new Error(
+      "Impossible de récupérer les détails complets du projet via l'API REST.",
+    );
+  }
+
+  const fullProjectInfo = await response.json();
+  const rootId = fullProjectInfo.rootId;
+  if (!rootId) {
+    throw new Error(
+      "Impossible de trouver l'ID du dossier racine (rootId) dans les détails du projet.",
+    );
+  }
+
+  return rootId;
+}
+
+//  Scanne et retourne une liste plate de tous les sous-dossiers.
+
+async function recursivelyFetchAllSubfolders(startFolderId, accessToken) {
+  const allSubfolderIds = [];
+  const foldersToVisit = [startFolderId]; // On commence avec le dossier parent
+  const visitedFolders = new Set(); // Pour éviter les boucles infinies (sécurité)
+
+  while (foldersToVisit.length > 0) {
+    const currentFolderId = foldersToVisit.shift(); // On prend le premier de la liste
+
+    if (visitedFolders.has(currentFolderId)) {
+      continue; // Déjà visité, on ignore
+    }
+    visitedFolders.add(currentFolderId);
+
+    try {
+      const subFolders = await fetchFolderContents(
+        currentFolderId,
+        accessToken,
+      );
+      for (const subFolder of subFolders) {
+        allSubfolderIds.push(subFolder.id); // On ajoute l'ID à notre liste de résultats
+        foldersToVisit.push(subFolder.id); // On ajoute ce sous-dossier à la liste des prochains à visiter
+      }
+    } catch (error) {
+      console.warn(
+        `Impossible de scanner le sous-dossier ${currentFolderId}. Il sera ignoré.`,
+        error,
+      );
+    }
+  }
+  return allSubfolderIds;
+}
+
+// Fonction de récupération des noms de dossier pour tableau configuration
+async function fetchAllProjectFolders(triconnectAPI, accessToken) {
+  const rootId = await getProjectRootId(triconnectAPI, accessToken);
+  const allFolders = []; // On commence avec une liste vide
+  await _recursivelyGetAllFolders(rootId, accessToken, allFolders);
+  return allFolders;
+}
+
+//Fonction récursive
+async function _recursivelyGetAllFolders(folderId, accessToken, folderList) {
+  try {
+    const subFolders = await fetchFolderContents(folderId, accessToken);
+    for (const folder of subFolders) {
+      folderList.push({ id: folder.id, name: folder.name });
+      // Appel récursif pour descendre dans l'arborescence
+      await _recursivelyGetAllFolders(folder.id, accessToken, folderList);
+    }
+  } catch (error) {
+    console.warn(
+      `Impossible de scanner le contenu du dossier ${folderId}. Il sera ignoré.`,
+      error,
+    );
+  }
+}
+
+//  Récupère le rôle de l'utilisateur connecté pour le projet actuel
+async function fetchUserProjectRole(projectId, accessToken) {
+  // Cet endpoint est spécifique à l'utilisateur courant dans le contexte d'un projet
+  const userProjectDetailsUrl = `https://app21.connect.trimble.com/tc/api/2.0/projects/${projectId}/users/me`;
+
+  const response = await fetch(userProjectDetailsUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Impossible de récupérer le rôle de l'utilisateur pour le projet.`,
+    );
+  }
+
+  const userProjectDetails = await response.json();
+  // L'API renvoie une propriété 'role' qui peut être 'ADMIN' ou 'USER'
+  return userProjectDetails.role;
+}
+
+/**
+ * Calcule le statut général d'un document basé sur la priorité des visas enregistrés.
+ * @param {Array} docTrackingInfo - Le tableau des entrées de suivi pour un document.
+ * @returns {string} Le statut général calculé ('REF', 'VAO', 'VSO', 'SO', 'En Cours').
+ */
+function calculateGeneralStatus(docTrackingInfo) {
+  if (!docTrackingInfo || docTrackingInfo.length === 0) {
+    return "En Cours"; // Statut par défaut si aucun visa n'a été posé.
+  }
+
+  const statusPriority = ["REF", "VAO", "VSO", "SO"];
+  const docStatuses = docTrackingInfo.map((entry) => entry.status);
+
+  for (const priorityStatus of statusPriority) {
+    if (docStatuses.includes(priorityStatus)) {
+      return priorityStatus; // On retourne le premier statut prioritaire trouvé.
+    }
+  }
+
+  return "En Cours"; // Si aucun statut prioritaire n'est trouvé.
+}
+
+/**
+ * Récupère toutes les versions d'un fichier spécifique.
+ * @param {string} fileId - L'ID du fichier.
+ * @param {string} accessToken - Le token d'accès.
+ * @returns {Promise<Array>} - Une promesse qui résout en un tableau de versions du fichier.
+ */
+async function fetchFileAllVersions(fileId, accessToken) {
+  const versionsApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/files/${fileId}/versions`;
+  const response = await fetch(versionsApiUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    console.warn(
+      `Impossible de récupérer les versions pour le fichier ${fileId}.`,
+    );
+    return []; // Retourne un tableau vide en cas d'erreur pour ne pas bloquer le reste.
+  }
+  const versions = await response.json();
+  // L'API renvoie des objets de version, on s'assure qu'ils ont bien un ID de fichier parent pour la cohérence
+  return versions.map((versionObject) => ({
+    ...versionObject,
+    parentId: versionObject.folderId,
+  }));
+}
+
+//Définit les permissions d'accès complet à un dossier pour tous les utilisateurs du projet
+async function setFolderFullAccessForAllUsers(folderId, accessToken) {
+  const permissionsApiUrl = `https://app21.connect.trimble.com/tc/api/2.0/folders/fs/${folderId}/permissions`;
+
+  // Le payload CORRECT, respectant la structure complète de l'objet "acl".
+  const payload = {
+    acl: {
+      FULL_ACCESS: ["tc-groups-*"],
+    },
+  };
+
+  try {
+    const response = await fetch(permissionsApiUrl, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok && response.status !== 409) {
+      // 409 Conflict est acceptable
+      const errorText = await response.text();
+      // On lance une erreur pour mieux la voir dans la console, car c'est un point critique
+      throw new Error(
+        `La mise à jour des permissions a échoué (statut: ${response.status}): ${errorText}`,
+      );
+    } else {
+      console.log(
+        `Permissions pour le dossier ${folderId} traitées avec succès.`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `Erreur critique lors de la mise à jour des permissions pour ${folderId}:`,
+      error,
+    );
+    // On propage l'erreur pour que l'initialisation s'arrête si les permissions échouent
+    throw error;
+  }
+}
+
+// On exporte les fonctions pour qu'elles soientt utilisables dans main.js
 export {
-  fetchUserProjectRole,
-  fetchLinksConfiguration,
-  getProjectRootId,
+  fetchVisaDocuments,
+  fetchProjectGroups,
+  saveConfigurationFile,
+  fetchConfigurationFile,
+  fetchFolderContents,
+  fetchUsersAndGroups,
+  fetchLoggedInUserDetails,
+  fetchVisaPossibleStates,
+  updatePSetStatus,
+  getRootFolders,
+  getConfigFolderId,
+  fetchFluxDefinitions,
   findOrCreateFolder,
-  saveLinksConfiguration,
+  getProjectRootId,
+  recursivelyFetchAllSubfolders,
+  fetchAllProjectFolders,
+  fetchUserProjectRole,
+  calculateGeneralStatus,
+  setFolderFullAccessForAllUsers,
 };
