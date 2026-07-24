@@ -1,20 +1,33 @@
 <!doctype html>
 <html lang="fr">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Extension de Test Trimble</title>
+    <title>ECNA Gestion Visa - Extension Trimble Connect</title>
+    <!-- On lie la feuille de style externe -->
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="header-banner">
-      <button id="config-btn">Configuration</button>
+      <button id="dashboardBtn">Tableau de Bord</button>
+      <button id="documentBtn">Documents</button>
+      <button id="visasBtn">Missions</button>
+      <button id="configBtn">Configuration</button>
     </div>
-<div id="mainContent" class="main-content"></div>
+
+    <div id="mainContent" class="main-content">
+      <p>Bienvenue sur l'interface de gestion de visa ECNA !</p>
+    </div>
+
     <!-- API Trimble Connect -->
     <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
 
-    <!-- Notre script principal -->
+    <!-- Notre script principal. L'attribut type="module" est crucial ! -->
+    <!-- Il permet d'utiliser import et export. -->
     <script type="module" src="main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   </body>
 </html>
