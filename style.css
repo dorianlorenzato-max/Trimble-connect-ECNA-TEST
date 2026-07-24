@@ -53,12 +53,98 @@ body {
   color: #003a72;
 }
 
+/* === STYLES POUR LE TABLEAU DES VISAS (SECTION RÉINTÉGRÉE) === */
+.visa-table-container {
+  display: flex; /* Utilise flexbox pour l'agencement */
+  flex-direction: column; /* Agencement vertical (header, body, footer) */
+  height: 70vh; /* Hauteur fixe, par exemple 70% de la hauteur de la vue */
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  border: 1px solid #ddd; /* Ajout d'une bordure globale */
+  border-radius: 8px;
+  background-color: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+.visa-table-body-wrapper {
+  flex-grow: 1; /* Prend tout l'espace vertical restant */
+  overflow-y: auto; /* La barre de défilement apparaît ici ! */
+  overflow-x: auto;
+}
+.visa-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.visa-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f8f8f8;
+}
+
+.visa-table-footer {
+  flex-shrink: 0; /* Empêche le pied de page de rétrécir */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background-color: #f8f8f8;
+  border-top: 1px solid #ddd;
+  border-bottom-left-radius: 8px; /* Arrondir les coins inférieurs */
+  border-bottom-right-radius: 8px;
+}
+
+.pagination-controls,
+.page-size-controls,
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-size-btn,
+.pagination-btn {
+  border: 1px solid #ccc;
+  background-color: #fff;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.page-size-btn.active,
+.pagination-btn.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.pagination-info {
+  color: #555;
+}
+
+.visa-table th,
+.visa-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+}
+.visa-table th {
+  background-color: #f8f8f8;
+  font-weight: bold;
+  color: #333;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.visa-table tbody tr:hover {
+  background-color: #f1f1f1;
+}
+
 /* === STYLES UNIFIÉS POUR LES BOUTONS === */
 .button-primary,
 .button-secondary,
 .button-danger,
 .config-button {
-  /* config-button est un alias pour button-primary dans votre code */
   border: none;
   padding: 12px 20px;
   border-radius: 6px;
@@ -107,7 +193,177 @@ body {
   font-size: 0.9rem;
 }
 
-/* === MESSAGES DE RETOUR (Succès, Sauvegarde, Erreur) === */
+/* === PAGE DE CONFIGURATION & GESTION DES FLUX === */
+.config-page-container,
+.flux-management-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+/* Conteneur et Table pour la GESTION des flux */
+.flux-table-wrapper {
+  overflow-x: auto;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.flux-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.flux-table th,
+.flux-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.flux-table th {
+  background-color: #f8f8f8;
+  font-weight: bold;
+}
+
+.flux-table tbody tr:hover {
+  background-color: #f1f1f1;
+}
+
+.flux-actions-cell {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* === PAGE DE CRÉATION / ÉDITION DE FLUX === */
+.flux-creation-container {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.form-section {
+  margin-bottom: 25px;
+}
+
+.form-section label,
+.form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #555;
+}
+
+.form-section input[type="text"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 1rem;
+}
+
+#flux-steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.flux-step {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.step-header h3 {
+  margin: 0;
+  color: #005a70;
+}
+
+.remove-step-btn {
+  background: none;
+  border: none;
+  color: #d9534f;
+  font-size: 1.5rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 10px;
+}
+.remove-step-btn:hover {
+  color: #c9302c;
+}
+
+.step-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.form-group select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background-color: white;
+}
+
+select[multiple] {
+  min-height: 120px;
+}
+
+.add-step-wrapper {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.add-button {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 1.8rem;
+  line-height: 40px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.add-button:hover {
+  background-color: #218838;
+}
+
+.flux-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-top: 30px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+}
+
+/* === MESSAGES DE RETOUR (Succès, Sauvegarde) === */
 .message-container {
   padding: 20px;
   border-radius: 8px;
@@ -121,139 +377,737 @@ body {
 .message-container h2 {
   margin-top: 0;
 }
-.config-actions {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
+/* === PAGE D'AFFECTATION (ARBORESCENCE) === */
+.affectation-page-container {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
-/* === PAGE D'ACCUEIL === */
-.home-container {
-  max-width: 600px;
-  margin: 40px auto;
-  text-align: center;
+.folder-browser-container {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 300px;
+  max-height: 50vh; /* Hauteur maximale avec défilement */
+  overflow-y: auto;
 }
 
-.home-container h1 {
-  color: #003a72; /* Bleu institutionnel Eiffage */
+.folder-tree {
+  list-style-type: none;
+  padding-left: 20px;
 }
 
-.home-container p {
+.folder-tree li {
+  padding: 5px 0;
+}
+
+.folder-item .folder-name {
+  cursor: pointer;
+  font-weight: bold;
+  color: #005a70;
+}
+
+.folder-item .folder-name:hover {
+  text-decoration: underline;
+}
+
+/* Ajout d'une icône de dossier via un pseudo-élément */
+.folder-item .folder-name::before {
+  content: "📁"; /* Icône de dossier */
+  margin-right: 8px;
+  font-weight: normal;
+}
+
+.folder-item.collapsed > ul {
+  display: none;
+}
+
+.folder-item-empty {
+  font-style: italic;
+  color: #888;
+  padding-left: 20px;
+}
+
+.loading-text {
+  font-weight: normal;
+  font-style: italic;
   color: #555;
-  font-size: 1.1rem;
-  margin-bottom: 30px;
 }
-
-.home-button-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+.affectation-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Deux colonnes de largeur égale */
+  gap: 20px;
   align-items: flex-start;
 }
 
-.home-button-list button {
-  width: auto;
-  min-width: 200px;
-  padding: 15px 20px;
-  font-size: 1.1rem;
-  background-color: #005a70;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
+.folder-browser-container,
+.assignment-panel {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 300px;
 }
 
-.home-button-list button:hover {
-  background-color: #007a93;
+.folder-item.selected > .folder-name {
+  background-color: #005a70;
+  color: white;
+  padding: 2px 5px;
+  border-radius: 3px;
 }
-/* Cache le bouton de configuration par défaut */
-#config-btn {
-  display: none;
-}
-/* === SECTION DE CONFIGURATION === */
-.config-controls {
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #ddd;
-}
-/* === FENÊTRE MODALE === */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.6);
+
+.assignment-panel-placeholder {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  height: 100%;
+  color: #888;
 }
 
-.modal-content {
-  background-color: #fff;
-  padding: 30px;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-}
-
-.modal-content h2 {
+.assignment-panel-content h3 {
   margin-top: 0;
-  margin-bottom: 25px;
   color: #003a72;
 }
 
-.modal-form .form-group {
-  margin-bottom: 20px;
-}
-
-.modal-form label {
-  display: block;
+.assignment-panel-content .selected-folder-name {
   font-weight: bold;
-  margin-bottom: 8px;
+  font-size: 1.1rem;
+  background-color: #f0f0f0;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  word-break: break-all;
 }
 
-.modal-form input[type="text"] {
+#flux-assignment-select {
   width: 100%;
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 5px;
+  margin-bottom: 20px;
+}
+/* Pour indiquer que les lignes du tableau sont cliquables */
+.visa-table tbody tr:hover {
+  background-color: #eaf6ff; /* Un bleu clair pour le survol */
+  cursor: pointer;
+}
+
+/* === PAGE D'INTERFACE DE VISA === */
+.visa-interface-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.visa-interface-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr; /* Trois colonnes */
+  gap: 20px;
+  align-items: start;
+}
+
+.visa-col {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.visa-data-bubble {
+  background-color: #f0f5f9;
+  border: 1px solid #c9d6e0;
+  border-radius: 8px;
+  padding: 10px 15px;
+}
+
+.visa-data-bubble label {
+  display: block;
+  font-size: 0.8rem;
+  color: #555;
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+.visa-data-bubble span,
+.visa-data-bubble select,
+.visa-data-bubble button {
   font-size: 1rem;
 }
 
-.modal-actions {
+.visa-data-bubble.full-width {
+  grid-column: 1 / -1; /* Prend toute la largeur */
+}
+
+.visa-data-bubble textarea {
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  font-family: Arial, sans-serif;
+  resize: vertical;
+}
+
+.visa-actions {
   display: flex;
   justify-content: flex-end;
   gap: 15px;
   margin-top: 30px;
-  padding-top: 20px;
   border-top: 1px solid #eee;
+  padding-top: 20px;
+  grid-column: 1 / -1;
 }
-/* === STYLES POUR LES MODES D'ÉDITION === */
+/* Style pour les poignées de redimensionnement */
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0; /* S'étend sur toute la hauteur */
+  width: 5px; /* Largeur de la zone de clic */
+  background-color: rgba(
+    0,
+    0,
+    0,
+    0.05
+  ); /* Très légère couleur pour la visibilité par défaut */
+  cursor: col-resize; /* Curseur de redimensionnement horizontal */
+  z-index: 1; /* S'assure qu'il est au-dessus du contenu de la colonne */
+  border-right: 1px solid #ccc; /* Ligne verticale fine pour séparer les colonnes */
+}
 
-/* Change le curseur pour indiquer qu'on peut interagir avec les boutons */
-.edit-mode-active .link-button,
-.delete-mode-active .link-button {
+/* Feedback visuel lors du survol ou du redimensionnement */
+.resizer:hover,
+.resizing .resizer {
+  background-color: #007bff; /* Un bleu pour indiquer l'activité */
+  opacity: 0.7; /* Rendu légèrement plus opaque */
+  border-right: 1px solid #007bff; /* La bordure devient bleue au survol */
+}
+
+/* Prévient la sélection de texte pendant le redimensionnement */
+.resizing {
+  user-select: none;
+}
+
+/* Assure que les TH sont des conteneurs pour les resizers positionnés absolument */
+.visa-table th {
+  /* position: sticky est déjà position: relative, donc c'est bon */
+  /* Ajouter overflow: hidden pour éviter que le texte ne déborde si la colonne est réduite */
+  overflow: hidden;
+  /* Important: Le width doit être géré par JavaScript ou être fluide */
+  width: auto;
+}
+
+/* Applique la largeur aux TD du tableau pour que la colonne entière soit affectée */
+.visa-table td {
+  overflow: hidden;
+  white-space: nowrap; /* Empêche le retour à la ligne automatique */
+  text-overflow: ellipsis; /* Ajoute des points de suspension si le texte est trop long */
+}
+/* Style pour l'icône de filtre */
+.filter-icon {
+  margin-left: 5px; /* Espace entre le texte du TH et l'icône */
   cursor: pointer;
-  box-shadow: 0 0 0 2px #007bff; /* Ajoute un halo bleu */
+  font-size: 0.9em; /* Taille de l'icône */
+  color: #888; /* Couleur par défaut */
+  transition: color 0.2s ease;
+  vertical-align: middle; /* Alignement avec le texte */
 }
 
-.delete-mode-active .link-button {
-  box-shadow: 0 0 0 2px #d9534f; /* Ajoute un halo rouge pour la suppression */
+.filter-icon:hover {
+  color: #000; /* Assombrir au survol */
 }
-/* === BOUTON TERMINER === */
-.finish-editing-btn {
-  position: fixed;
-  bottom: 25px;
-  right: 25px;
+
+/* Style pour l'icône de filtre active */
+.filter-icon.active {
+  color: #ff8c00; /* Orange vif quand le filtre est actif */
+}
+
+/* Style de base pour la popup de filtre */
+.filter-popup {
+  position: absolute;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  z-index: 20; /* S'assure qu'il est au-dessus du reste du contenu */
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: none; /* Caché par défaut */
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 5px;
+}
+
+.filter-popup.active {
+  display: flex; /* Affiché quand actif */
+}
+
+.filter-popup label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: normal;
+  font-size: 0.9em;
+}
+
+.filter-popup input[type="checkbox"] {
+  margin-right: 5px;
+}
+
+.filter-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+/* Rend le contenu du header cliquable pour le tri */
+.th-content.sortable {
+  cursor: pointer;
+  display: inline-flex; /* Permet d'aligner le texte et les icônes */
+  align-items: center;
+}
+
+/* Style pour l'icône de tri (la flèche) */
+.sort-icon {
+  margin: 0 5px; /* Espace autour de la flèche de tri */
+  color: #007bff; /* Bleu pour la visibilité */
+  font-size: 0.8em;
+  width: 10px; /* Donne une largeur fixe pour éviter les décalages */
+  text-align: center;
+  display: inline-block;
+}
+
+/* === LÉGENDE DES STATUTS === */
+.visa-page-header {
+  display: flex;
+  flex-direction: row; /* On revient à une ligne */
+  justify-content: space-between; /* Pour espacer le bloc de titre et la légende */
+  align-items: flex-start; /* Pour que les deux blocs soient alignés en haut */
+  gap: 20px;
+  margin-bottom: 15px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.visa-page-header h1 {
+  margin: 0; /* Retire la marge par défaut du h1 */
+}
+
+.visa-legend {
+  border: 1px solid #c9d6e0;
+  border-radius: 8px;
+  padding: 10px 15px;
+  background-color: #f8f9fa;
+  font-size: 0.9em;
+}
+
+.visa-legend h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.legend-color-box {
+  display: inline-block;
+  width: 60px; /* Largeur de la bulle */
+  padding: 3px 0;
+  border-radius: 15px; /* Pour un effet "pilule" */
+  text-align: center;
+  font-weight: bold;
+  color: #fff; /* Couleur du texte dans la bulle */
+  margin-right: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+.legend-items-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Crée deux colonnes de taille égale */
+  gap: 5px 15px; /* Espace vertical et horizontal entre les items */
+}
+
+/* === COULEURS DES STATUTS (à la fois pour la légende et le tableau) === */
+
+/* Validé Sans Observation */
+.status-vso {
+  background-color: #28a745;
+  color: white;
+}
+/* Validé Avec Observation */
+.status-vao {
+  background-color: #ffc107;
+  color: #212529;
+}
+/* En cours */
+.status-en-cours {
+  background-color: #fd7e14;
+  color: white;
+}
+/* Refusé */
+.status-ref {
+  background-color: #dc3545;
+  color: white;
+}
+/* Sans Objet */
+.status-so {
+  background-color: #6c757d;
+  color: white;
+}
+/* Statut par défaut / Non défini */
+.status-default {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+/* Style pour la cellule de statut dans le tableau */
+.status-cell-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* Style pour la nouvelle colonne d'action (l'œil) */
+.visa-table .action-col {
+  position: sticky;
+  left: 0; /* Collée au bord gauche */
+  background-color: #f8f8f8; /* Pour le TH */
+  z-index: 7; /* Au-dessus des colonnes normales */
+}
+
+/* Style pour l'icône de visualisation dans le tableau */
+.view-doc-icon {
+  cursor: pointer;
+  font-size: 1.2em;
+  color: #005a70; /* Utilise une couleur thématique */
+  transition: transform 0.2s ease;
+}
+
+.view-doc-icon:hover {
+  transform: scale(1.2); /* Grossit légèrement au survol */
+  color: #007a93;
+}
+
+/* Style pour la colonne fixe (Nom du document) */
+.visa-table .sticky-column-name {
+  position: sticky;
+  left: 40px; /* Décalée de la largeur de la colonne action */
+  background-color: #f8f8f8; /* Pour le TH */
+  z-index: 6; /* Juste en dessous de la colonne action, mais au-dessus du reste */
+}
+
+/* Appliquer un fond blanc aux cellules de données fixes pour masquer le contenu qui défile */
+.visa-table td.action-col,
+.visa-table td.sticky-column-name {
+  background-color: #fff;
+}
+
+/* Ajuster le z-index général des en-têtes */
+.visa-table thead th {
+  z-index: 5; /* Z-index de base pour les en-têtes */
+}
+
+/* Assurer que le resizer est au-dessus de tout */
+.resizer {
+  z-index: 10;
+}
+
+/* === STYLES POUR L'EN-TÊTE DE TABLEAU COMPLEXE === */
+
+/* Style pour l'en-tête principal d'un groupe de colonnes */
+.visa-table .group-header {
+  text-align: center;
+  background-color: #8ba1be; /* Fond bleu foncé comme dans la capture */
+  color: rgb(0, 0, 0);
+  border-left: 1px solid #a0a0a0;
+}
+
+/* Style pour les sous-en-têtes */
+.visa-table .sub-header {
+  background-color: #a3c1c9; /* Fond bleu-vert comme dans la capture */
+  color: rgb(0, 0, 0);
+  border-left: 1px solid #a0a0a0;
+}
+
+/* S'assure que les en-têtes rowspanés ont le bon fond */
+.visa-table th[rowspan="2"] {
+  background-color: #f8f8f8;
+  color: #333;
+  vertical-align: middle; /* Centre le contenu verticalement */
+}
+
+/* === STYLES POUR LE BOUTON D'EXPORT === */
+.visa-page-header {
+  align-items: center; /* Aligne verticalement le titre et le bouton */
+}
+
+.export-container {
+  position: relative;
+  display: inline-block;
+}
+
+.export-options {
+  display: none;
+  position: absolute;
+  background-color: #f1f1f1;
+  min-width: 160px;
+  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
   z-index: 100;
-  padding: 12px 20px;
+  border-radius: 5px;
+  overflow: hidden; /* Pour que les coins des boutons soient bien arrondis */
+}
+
+.export-options.visible {
+  display: block;
+}
+
+.export-options button {
+  color: black;
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background-color: transparent;
+  cursor: pointer;
+}
+
+.export-options button:hover {
+  background-color: #ddd;
+}
+
+.visa-title-container {
+  display: flex;
+  flex-direction: column; /* Empile le titre et le bouton */
+  align-items: flex-start; /* Les aligne à gauche */
+  gap: 15px; /* Espace entre le titre et le bouton */
+}
+
+/* Bonus : retire la marge par défaut du titre pour un meilleur contrôle */
+.visa-title-container h1 {
+  margin: 0;
+}
+
+/* Style pour les dates de visa en retard */
+.date-en-retard {
+  color: #fd7e14; /* Orange (identique au statut "En cours" pour la cohérence) */
+  font-weight: bold;
+}
+
+/* Case à cocher */
+
+.heredity-checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 15px;
+  cursor: help; /* Indique qu'il y a une info-bulle */
+}
+
+/* Styles pour tableau de configuration */
+
+.summary-table-wrapper {
+  margin-top: 40px;
+  overflow-x: auto;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ddd;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.summary-table th {
+  background-color: #f8f8f8;
+  font-weight: bold;
+}
+/* === TABLEAU DE BORD === */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  padding: 10px;
+  align-items: start; /* Permet d'aligner les cartes sur le haut de leur cellule de grille */
+}
+
+.dashboard-card {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  display: flex; /* Utilise flexbox pour l'alignement interne (h2, etc.) */
+  flex-direction: column; /* Les éléments internes s'empilent */
+}
+
+.dashboard-card h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 1.2rem;
+  color: #003a72;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.chart-container {
+  position: relative;
+  flex-grow: 1;
+}
+
+/* Cartes KPI */
+.kpi-card-container {
+  flex-direction: column; /* Les enfants s'empilent verticalement (h2, puis kpi-cards-group) */
+  align-items: flex-start; /* Aligne le h2 et le kpi-cards-group au début de l'axe transversal (donc à gauche) */
+  gap: 20px; /* Espace entre le h2 et le kpi-cards-group */
+}
+.kpi-cards-group {
+  display: flex;
+  justify-content: space-around;
+  gap: 10px;
+  width: 100%; /* S'assure qu'il prend toute la largeur disponible */
+}
+.kpi-card {
+  flex: 1; /* Permet aux cartes de prendre une taille égale et de s'adapter */
+  text-align: center;
+}
+
+.kpi-card h3 {
+  margin: 0 0 15px 0;
+  font-size: 1rem;
+  color: #555;
+}
+.kpi-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+}
+.kpi-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+.kpi-value span {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: #005a70;
+}
+
+/* Liste des documents déposés */
+.deposited-docs-list {
+  flex-grow: 1;
+  overflow-y: auto;
+}
+.deposited-docs-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.deposited-docs-list li {
+  display: flex; /* ANNOTATION : Active flexbox pour l'élément de liste */
+  justify-content: space-between; /* ANNOTATION : Espace le nom du document et le statut */
+  align-items: center; /* ANNOTATION : Centre verticalement le nom et le statut */
+  padding: 10px 5px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.deposited-docs-list li .doc-name {
+  /* ANNOTATION : Style le nom du document */
+  flex-grow: 1; /* Prend l'espace restant */
+  white-space: nowrap; /* Empêche le retour à la ligne */
+  overflow: hidden; /* Cache le texte qui dépasse */
+  text-overflow: ellipsis; /* Ajoute "..." si le texte est tronqué */
+  margin-right: 10px; /* Espacement entre le nom du doc et le statut */
+}
+/* Style pour les lignes des versions antérieures de documents */
+.outdated-version {
+  background-color: #fffde7 !important; /* Un jaune très clair, !important pour s'assurer qu'il s'applique */
+}
+
+/* Style au survol pour garder l'interactivité */
+.outdated-version:hover {
+  background-color: #fff9c4 !important; /* Un jaune un peu plus soutenu */
+}
+/* Style pour l'icône d'observation dans le tableau */
+.observation-icon {
+  cursor: help; /* Affiche un curseur avec un point d'interrogation, idéal pour une infobulle */
+  font-size: 1.2em;
+}
+/* Style pour la popup d'observation */
+.observation-popup {
+  position: absolute;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  width: 300px;
+  font-size: 0.9rem;
+}
+.observation-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f7f7f7;
+  border-bottom: 1px solid #eee;
+  font-weight: bold;
+}
+.observation-popup-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.observation-popup-content {
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap; /* Respecte les sauts de ligne */
+}
+.observation-popup-content hr {
+  border: none;
+  border-top: 1px dashed #ccc;
+  margin: 10px 0;
+}
+/* Style pour la petite mention à côté d'un label (ex: "en jours calendaires") */
+.label-hint {
+  font-weight: normal;
+  font-style: italic;
+  font-size: 0.9em;
+  color: #666;
+}
+
+/* Style pour la boîte d'information sur la sélection multiple */
+.info-text {
+  font-size: 0.9em;
+  color: #555;
+  background-color: #f8f9fa; /* Un fond très léger pour la distinguer */
+  border: 1px solid #e9ecef;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 8px; /* Espace avant le champ de sélection */
+  line-height: 1.4;
 }
